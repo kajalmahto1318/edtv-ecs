@@ -1,5 +1,5 @@
 {
-  "name": "edtv-mediaconvert-worker",
+  "name": "edtv-job-status-handler",
   "version": "1.0.0",
   "type": "module",
   "main": "index.mjs",
