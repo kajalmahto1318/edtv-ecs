@@ -20,16 +20,25 @@ export class MediaConvertJobEventsStack extends cdk.Stack {
 
     const { envName } = props;
 
-    this.jobEventsTopic = new sns.Topic(this, "JobEventsTopic", {
-      topicName: `Edtv-MC-JobEvents-${envName}`,
+    /* -------------------------------------------------
+     * SNS TOPIC (MediaConvert job events)
+     * ------------------------------------------------- */
+    this.jobEventsTopic = new sns.Topic(this, "MediaConvertJobEventsTopic", {
+      topicName: `edtv-mediaconvert-events-${envName}`,
     });
 
-    new events.Rule(this, "MediaConvertJobStateRule", {
-      ruleName: `Edtv-MC-JobState-${envName}`,
+    /* -------------------------------------------------
+     * EVENTBRIDGE RULE
+     * ------------------------------------------------- */
+    new events.Rule(this, "MediaConvertJobStateChangeRule", {
+      ruleName: `edtv-mediaconvert-job-state-${envName}`,
+      description: "Capture MediaConvert job COMPLETE / ERROR events",
       eventPattern: {
         source: ["aws.mediaconvert"],
         detailType: ["MediaConvert Job State Change"],
-        detail: { status: ["COMPLETE", "ERROR"] },
+        detail: {
+          status: ["COMPLETE", "ERROR"],
+        },
       },
       targets: [new targets.SnsTopic(this.jobEventsTopic)],
     });

@@ -7,6 +7,9 @@ import { S3Stack } from "../../lib/stacks/s3-stack";
 import { SqsStack } from "../../lib/stacks/sqs-stack";
 import { SsmStack } from "../../lib/stacks/ssm-stack";
 import { CloudfrontStack } from "../../lib/stacks/cloudfront-stack";
+import { EcsClusterStack } from "../../lib/stacks/ecs-cluster-stack";
+import { EcsWorkerStack } from "../../lib/stacks/ecs-task-definition-stack";
+import { DatabaseStack } from "../../lib/stacks/database-stack";
 import { ENV } from "../../lib/shared/environment";
 
 const app = new cdk.App();
@@ -22,20 +25,27 @@ const networkStack = new NetworkStack(app, "EdtvNetworkStack", {
   envName: ENV.name,
 });
 
-/* ---------------- IAM ---------------- */
-const iamStack = new IamStack(app, "EdtvIamStack", {
-  env: stackEnv,
-  envName: ENV.name,
-});
-
-/* ---------------- SECURITY GROUPS ---------------- */
+/* ---------------- SECURITY ---------------- */
 const securityStack = new SecurityStack(app, "EdtvSecurityStack", {
   env: stackEnv,
   vpc: networkStack.vpc,
   envName: ENV.name,
 });
 
-/* ---------------- S3 BUCKETS ---------------- */
+/* ---------------- ECS CLUSTER ---------------- */
+new EcsClusterStack(app, "EdtvEcsClusterStack", {
+  env: stackEnv,
+  vpc: networkStack.vpc,
+  envName: ENV.name,
+});
+
+/* ---------------- IAM ---------------- */
+new IamStack(app, "EdtvIamStack", {
+  env: stackEnv,
+  envName: ENV.name,
+});
+
+/* ---------------- S3 ---------------- */
 const s3Stack = new S3Stack(app, "EdtvS3Stack", {
   env: stackEnv,
   envName: ENV.name,
@@ -48,13 +58,29 @@ const sqsStack = new SqsStack(app, "EdtvSqsStack", {
 });
 
 /* ---------------- SSM ---------------- */
-const ssmStack = new SsmStack(app, "EdtvSsmStack", {
+new SsmStack(app, "EdtvSsmStack", {
   env: stackEnv,
   envName: ENV.name,
 });
 
+/* ---------------- DATABASE (RDS + SECRET) ---------------- */
+const databaseStack = new DatabaseStack(app, "EdtvDatabaseStack", {
+  env: stackEnv,
+  vpc: networkStack.vpc,
+  envName: ENV.name,
+  ecsSecurityGroup: securityStack.ecsSG,
+});
+
+/* ---------------- ECS TASK DEFINITION (WORKER) ---------------- */
+new EcsWorkerStack(app, "EdtvEcsWorkerStack", {
+  env: stackEnv,
+  envName: ENV.name,
+  queue: sqsStack.queue,
+  dbSecret: databaseStack.dbSecret, // 
+});
+
 /* ---------------- CLOUDFRONT ---------------- */
-const cloudfrontStack = new CloudfrontStack(app, "EdtvCloudFrontStack", {
+new CloudfrontStack(app, "EdtvCloudFrontStack", {
   env: stackEnv,
   envName: ENV.name,
   processedBucket: s3Stack.targetBucket,
@@ -71,10 +97,6 @@ new cdk.CfnOutput(securityStack, "EcsSecurityGroupIdOutput", {
 
 new cdk.CfnOutput(securityStack, "LambdaSecurityGroupIdOutput", {
   value: securityStack.lambdaSG.securityGroupId,
-});
-
-new cdk.CfnOutput(securityStack, "RdsSecurityGroupIdOutput", {
-  value: securityStack.rdsSG.securityGroupId,
 });
 
 new cdk.CfnOutput(s3Stack, "MediaBucketNameOutput", {

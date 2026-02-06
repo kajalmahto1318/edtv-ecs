@@ -4,8 +4,7 @@ import * as mediaconvert from "aws-cdk-lib/aws-mediaconvert";
 import * as iam from "aws-cdk-lib/aws-iam";
 import * as s3 from "aws-cdk-lib/aws-s3";
 
-export interface MediaConvertJobTemplateCoreStackProps
-  extends cdk.StackProps {
+export interface MediaConvertJobTemplateCoreStackProps extends cdk.StackProps {
   envName: string;
   sourceBucket: s3.IBucket;
   targetBucket: s3.IBucket;
@@ -24,16 +23,17 @@ export class MediaConvertJobTemplateCoreStack extends cdk.Stack {
 
     const { envName, sourceBucket, targetBucket, mediaConvertRole } = props;
 
+    // Permissions
     sourceBucket.grantRead(mediaConvertRole);
     targetBucket.grantReadWrite(mediaConvertRole);
 
-    const hlsTemplate = new mediaconvert.CfnJobTemplate(
+    const jobTemplate = new mediaconvert.CfnJobTemplate(
       this,
-      "EdtvHlsTemplate",
+      "EdtvHlsJobTemplate",
       {
         name: `edtv-hls-template-${envName}`,
-        category: "EDTV-HLS",
-        description: "EDTV adaptive HLS template",
+        category: "EDTV",
+        description: "EDTV HLS MediaConvert Template",
         settingsJson: {
           OutputGroups: [
             {
@@ -42,7 +42,7 @@ export class MediaConvertJobTemplateCoreStack extends cdk.Stack {
                 Type: "HLS_GROUP_SETTINGS",
                 HlsGroupSettings: {
                   SegmentLength: 6,
-                  Destination: `s3://${targetBucket.bucketName}/`,
+                  Destination: `s3://${targetBucket.bucketName}/outputs/`,
                 },
               },
             },
@@ -51,6 +51,7 @@ export class MediaConvertJobTemplateCoreStack extends cdk.Stack {
       }
     );
 
-    this.jobTemplateName = hlsTemplate.name as string;
+    this.jobTemplateName = jobTemplate.name!;
   }
 }
+ 

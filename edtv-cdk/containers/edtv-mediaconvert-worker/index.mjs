@@ -1,56 +1,55 @@
 import AWS from "aws-sdk";
 
-// AWS SDK clients
 const sqs = new AWS.SQS({ region: process.env.AWS_REGION });
-const s3 = new AWS.S3();
 const mediaconvert = new AWS.MediaConvert({
   endpoint: process.env.MEDIACONVERT_ENDPOINT,
-  region: process.env.AWS_REGION
+  region: process.env.AWS_REGION,
 });
 
-// Lambda-style handler for ECS (can be invoked manually or via SQS trigger)
-export async function handler(event) {
-  console.log("Received event:", JSON.stringify(event, null, 2));
+const QUEUE_URL = process.env.QUEUE_URL;
 
-  for (const record of event.Records) {
-    const body = JSON.parse(record.body);
-    const inputKey = body.inputKey;
-    const outputKey = body.outputKey;
-    const bucket = body.bucket;
+async function pollQueue() {
+  while (true) {
+    const resp = await sqs
+      .receiveMessage({
+        QueueUrl: QUEUE_URL,
+        MaxNumberOfMessages: 1,
+        WaitTimeSeconds: 20,
+      })
+      .promise();
 
-    console.log(`Processing file: s3://${bucket}/${inputKey} -> ${outputKey}`);
+    if (!resp.Messages) continue;
 
-    const params = {
-      Role: process.env.MEDIACONVERT_ROLE_ARN,
-      Settings: {
-        Inputs: [{ FileInput: `s3://${bucket}/${inputKey}` }],
-        OutputGroups: [
-          {
-            Name: "File Group",
-            OutputGroupSettings: {
-              Type: "FILE_GROUP_SETTINGS",
-              FileGroupSettings: { Destination: `s3://${bucket}/${outputKey}/` }
-            },
-            Outputs: [
+    for (const msg of resp.Messages) {
+      const body = JSON.parse(msg.Body);
+
+      await mediaconvert
+        .createJob({
+          Role: process.env.MEDIACONVERT_ROLE_ARN,
+          Settings: {
+            Inputs: [{ FileInput: `s3://${body.bucket}/${body.key}` }],
+            OutputGroups: [
               {
-                ContainerSettings: { Container: "MP4" }
-              }
-            ]
-          }
-        ]
-      }
-    };
+                OutputGroupSettings: {
+                  Type: "FILE_GROUP_SETTINGS",
+                  FileGroupSettings: {
+                    Destination: `s3://${body.outputBucket}/${body.jobId}/`,
+                  },
+                },
+              },
+            ],
+          },
+        })
+        .promise();
 
-    try {
-      const result = await mediaconvert.createJob(params).promise();
-      console.log("MediaConvert job created:", result.Job.Id);
-    } catch (err) {
-      console.error("Error creating MediaConvert job:", err);
+      await sqs
+        .deleteMessage({
+          QueueUrl: QUEUE_URL,
+          ReceiptHandle: msg.ReceiptHandle,
+        })
+        .promise();
     }
   }
 }
 
-// If running directly (for local testing)
-if (process.env.NODE_ENV === "local") {
-  handler({ Records: [] }).then(() => console.log("Test run complete"));
-}
+pollQueue().catch(console.error);

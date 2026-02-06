@@ -3,6 +3,7 @@ import { Construct } from "constructs";
 import * as rds from "aws-cdk-lib/aws-rds";
 import * as ec2 from "aws-cdk-lib/aws-ec2";
 import * as secretsmanager from "aws-cdk-lib/aws-secretsmanager";
+import * as iam from "aws-cdk-lib/aws-iam";
 
 export interface DatabaseStackProps extends cdk.StackProps {
   vpc: ec2.IVpc;
@@ -33,17 +34,18 @@ export class DatabaseStack extends cdk.Stack {
     this.rdsSecurityGroup.addIngressRule(
       ecsSecurityGroup,
       ec2.Port.tcp(5432),
-      "Allow ECS to access Postgres"
+      "Allow ECS to access Postgres",
     );
 
     /* ----------------------------------------------------
-     * DATABASE SECRET (Secrets Manager)
+     * DATABASE SECRET
      * ---------------------------------------------------- */
     this.dbSecret = new secretsmanager.Secret(this, "PostgresSecret", {
       secretName: `edtv-postgres-${envName}-credentials`,
       generateSecretString: {
         secretStringTemplate: JSON.stringify({
           username: "edtv_admin",
+          dbname: "edtv",
         }),
         generateStringKey: "password",
         passwordLength: 16,
@@ -52,7 +54,7 @@ export class DatabaseStack extends cdk.Stack {
     });
 
     /* ----------------------------------------------------
-     * POSTGRES DATABASE INSTANCE
+     * POSTGRES DATABASE
      * ---------------------------------------------------- */
     this.dbInstance = new rds.DatabaseInstance(this, "EdtvPostgres", {
       engine: rds.DatabaseInstanceEngine.postgres({
@@ -66,16 +68,19 @@ export class DatabaseStack extends cdk.Stack {
 
       instanceType: ec2.InstanceType.of(
         ec2.InstanceClass.T4G,
-        ec2.InstanceSize.MICRO
+        ec2.InstanceSize.MICRO,
       ),
 
       credentials: rds.Credentials.fromSecret(this.dbSecret),
 
+      databaseName: "edtv",
+
       allocatedStorage: 20,
       maxAllocatedStorage: 100,
       storageType: rds.StorageType.GP3,
+      storageEncrypted: true,
 
-      multiAz: false, // can enable for prod later
+      multiAz: false,
       publiclyAccessible: false,
 
       securityGroups: [this.rdsSecurityGroup],

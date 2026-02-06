@@ -2,7 +2,7 @@
   "name": "edtv-ecs",
   "version": "0.1.0",
   "bin": {
-    "edtv-ecs": "bin/edtv-ecs.js"
+    "edtv-ecs": "edtv-cdk/bin/edtv-ecs.js"
   },
   "scripts": {
     "build": "tsc",
