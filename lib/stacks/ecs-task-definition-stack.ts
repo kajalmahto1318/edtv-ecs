@@ -4,13 +4,13 @@ import * as ecs from "aws-cdk-lib/aws-ecs";
 import * as iam from "aws-cdk-lib/aws-iam";
 import * as sqs from "aws-cdk-lib/aws-sqs";
 import * as logs from "aws-cdk-lib/aws-logs";
-import * as secretsmanager from "aws-cdk-lib/aws-secretsmanager";
 import * as path from "path";
 
 export interface EcsTaskDefinitionStackProps extends cdk.StackProps {
   envName: string;
   queue: sqs.IQueue;
-  dbSecret: secretsmanager.ISecret;
+  mediaConvertRoleArn: string;
+  mediaConvertEndpoint: string;
 }
 
 export class EcsTaskDefinitionStack extends cdk.Stack {
@@ -23,12 +23,12 @@ export class EcsTaskDefinitionStack extends cdk.Stack {
   ) {
     super(scope, id, props);
 
-    /* ---------------- TASK ROLE (App Permissions) ---------------- */
+    /* ---------------- TASK ROLE ---------------- */
     const taskRole = new iam.Role(this, "EcsWorkerTaskRole", {
       assumedBy: new iam.ServicePrincipal("ecs-tasks.amazonaws.com"),
     });
 
-    // SQS permissions
+    // SQS
     taskRole.addToPolicy(
       new iam.PolicyStatement({
         actions: [
@@ -40,7 +40,7 @@ export class EcsTaskDefinitionStack extends cdk.Stack {
       }),
     );
 
-    // MediaConvert permissions
+    // MediaConvert
     taskRole.addToPolicy(
       new iam.PolicyStatement({
         actions: [
@@ -52,10 +52,15 @@ export class EcsTaskDefinitionStack extends cdk.Stack {
       }),
     );
 
-    // ✅ RDS Secret read permission 
-    props.dbSecret.grantRead(taskRole);
+    // 🔥 REQUIRED
+    taskRole.addToPolicy(
+      new iam.PolicyStatement({
+        actions: ["iam:PassRole"],
+        resources: [props.mediaConvertRoleArn],
+      }),
+    );
 
-    /* ---------------- EXECUTION ROLE (Infra Permissions) ---------------- */
+    /* ---------------- EXECUTION ROLE ---------------- */
     const executionRole = new iam.Role(this, "EcsWorkerExecutionRole", {
       assumedBy: new iam.ServicePrincipal("ecs-tasks.amazonaws.com"),
       managedPolicies: [
@@ -80,9 +85,9 @@ export class EcsTaskDefinitionStack extends cdk.Stack {
     /* ---------------- CONTAINER ---------------- */
     this.taskDefinition.addContainer("EcsWorkerContainer", {
       image: ecs.ContainerImage.fromAsset(
-        path.resolve(
+        path.join(
           __dirname,
-          "../../../containers/edtv-mediaconvert-worker",
+          "../../../edtv-ecs/edtv-cdk/containers/edtv-mediaconvert-worker",
         ),
       ),
       logging: ecs.LogDrivers.awsLogs({
@@ -95,9 +100,10 @@ export class EcsTaskDefinitionStack extends cdk.Stack {
       }),
       environment: {
         ENV_NAME: props.envName,
-        QUEUE_URL: props.queue.queueUrl,
         AWS_REGION: cdk.Stack.of(this).region,
-        DB_SECRET_ARN: props.dbSecret.secretArn, // useful for app
+        QUEUE_URL: props.queue.queueUrl,
+        MEDIACONVERT_ROLE_ARN: props.mediaConvertRoleArn,
+        MEDIACONVERT_ENDPOINT: props.mediaConvertEndpoint,
       },
     });
   }

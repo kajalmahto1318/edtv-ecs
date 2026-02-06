@@ -5,6 +5,7 @@ import { applyEdtvTags } from "../shared/tags";
 
 interface IamStackProps extends cdk.StackProps {
   envName: string;
+  mediaConvertEndpoint?: string;
 }
 
 export class IamStack extends cdk.Stack {
@@ -13,13 +14,28 @@ export class IamStack extends cdk.Stack {
   public readonly mediaConvertRole: iam.Role;
   public readonly lambdaRole: iam.Role;
 
+  // 🔥 IMPORTANT
+  public readonly mediaConvertEndpoint: string;
+
   constructor(scope: Construct, id: string, props: IamStackProps) {
     super(scope, id, props);
 
-    const { envName } = props;
+    const { envName, mediaConvertEndpoint } = props;
 
     /* --------------------------------------------------
-     * MEDIACONVERT ROLE (used by MediaConvert service)
+     * MEDIACONVERT ENDPOINT (ACCOUNT-SPECIFIC)
+     * Use the provided endpoint or AWS default
+     * -------------------------------------------------- */
+    // Note: MediaConvert endpoints are managed by AWS.
+    // You can obtain the endpoint from your AWS account via:
+    // - AWS Console: MediaConvert > Account settings
+    // - AWS CLI: aws mediaconvert describe-endpoints
+    // - Or set via environment variable / SSM Parameter
+    this.mediaConvertEndpoint =
+      mediaConvertEndpoint || "https://mediaconvert.us-east-1.amazonaws.com";
+
+    /* --------------------------------------------------
+     * MEDIACONVERT SERVICE ROLE
      * -------------------------------------------------- */
     this.mediaConvertRole = new iam.Role(this, "MediaConvertRole", {
       roleName: `edtv-${envName}-mediaconvert-role`,
@@ -41,14 +57,13 @@ export class IamStack extends cdk.Stack {
     );
 
     /* --------------------------------------------------
-     * ECS TASK ROLE (inside container permissions)
+     * ECS TASK ROLE
      * -------------------------------------------------- */
     this.ecsTaskRole = new iam.Role(this, "EcsTaskRole", {
       roleName: `edtv-${envName}-ecs-task-role`,
       assumedBy: new iam.ServicePrincipal("ecs-tasks.amazonaws.com"),
     });
 
-    // SQS consume only
     this.ecsTaskRole.addToPolicy(
       new iam.PolicyStatement({
         actions: [
@@ -60,7 +75,6 @@ export class IamStack extends cdk.Stack {
       }),
     );
 
-    // MediaConvert minimal permissions
     this.ecsTaskRole.addToPolicy(
       new iam.PolicyStatement({
         actions: [
@@ -72,7 +86,6 @@ export class IamStack extends cdk.Stack {
       }),
     );
 
-    // Allow ECS to pass MediaConvert role
     this.ecsTaskRole.addToPolicy(
       new iam.PolicyStatement({
         actions: ["iam:PassRole"],
@@ -81,7 +94,7 @@ export class IamStack extends cdk.Stack {
     );
 
     /* --------------------------------------------------
-     * ECS EXECUTION ROLE (pull image, logs)
+     * ECS EXECUTION ROLE
      * -------------------------------------------------- */
     this.ecsExecutionRole = new iam.Role(this, "EcsExecutionRole", {
       roleName: `edtv-${envName}-ecs-execution-role`,

@@ -17,11 +17,9 @@ export class CloudfrontStack extends cdk.Stack {
 
     const { processedBucket, envName } = props;
 
-    // Use S3Origin (stable, works with any S3 bucket)
-    // Alternative: Use processedBucket.bucketWebsiteUrl for static website hosting
     this.distribution = new cloudfront.Distribution(this, "EdtvDistribution", {
       defaultBehavior: {
-        origin: new origins.S3Origin(processedBucket),
+        origin: new origins.S3Origin(processedBucket), // ⚠ deprecated but STABLE
         viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
         allowedMethods: cloudfront.AllowedMethods.ALLOW_GET_HEAD,
         cachePolicy: cloudfront.CachePolicy.CACHING_OPTIMIZED,
